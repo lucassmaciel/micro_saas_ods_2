@@ -190,15 +190,14 @@ def _generate_cerebras(prompt: str, model: str = config.CEREBRAS_LLM_MODEL) -> s
 
 
 def generate_answer_with_fallback(prompt: str) -> str:
-    """Cascade: Groq 70b → Groq 8b → Cerebras 8b, falling back on rate-limit/server errors."""
-    from groq import RateLimitError, InternalServerError
+    """Cascade: Groq 70b → Groq 8b → Cerebras 8b, falling back on any error."""
     try:
         return generate_answer(prompt, model=config.GROQ_LLM_MODEL)
-    except (RateLimitError, InternalServerError):
+    except Exception:
         pass
     try:
         return generate_answer(prompt, model=config.GROQ_LLM_FAST)
-    except (RateLimitError, InternalServerError):
+    except Exception:
         pass
     return _generate_cerebras(prompt)
 
