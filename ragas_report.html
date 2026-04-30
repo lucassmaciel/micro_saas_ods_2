@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAGAS Evaluation Report</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3349;
+      --text: #e2e8f0;
+      --text-muted: #8892aa;
+      --accent: #6c8fff;
+      --green: #4ade80;
+      --yellow: #facc15;
+      --red: #f87171;
+      --purple: #c084fc;
+      --teal: #2dd4bf;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1d27 0%, #161929 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 32px 40px 28px;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+    header h1 span { color: var(--accent); }
+    .meta {
+      display: flex;
+      gap: 24px;
+      margin-top: 10px;
+      color: var(--text-muted);
+      font-size: 0.82rem;
+    }
+    .meta b { color: var(--text); }
+
+    main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 60px; }
+
+    section { margin-bottom: 40px; }
+    section h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+    .kpi {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .kpi::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .kpi.blue::before  { background: var(--accent); }
+    .kpi.green::before { background: var(--green); }
+    .kpi.teal::before  { background: var(--teal); }
+    .kpi.purple::before { background: var(--purple); }
+
+    .kpi-label { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-value { font-size: 2rem; font-weight: 700; margin: 6px 0 2px; }
+    .kpi-sub   { font-size: 0.78rem; color: var(--text-muted); }
+    .kpi.blue  .kpi-value { color: var(--accent); }
+    .kpi.green .kpi-value { color: var(--green); }
+    .kpi.teal  .kpi-value { color: var(--teal); }
+    .kpi.purple .kpi-value { color: var(--purple); }
+
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 700px) { .charts-row { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+    }
+    .chart-card h3 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 16px;
+    }
+    .chart-wrap { position: relative; height: 240px; }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--surface2); }
+    th {
+      padding: 12px 16px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      text-align: left;
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-top: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: var(--surface2); }
+    tbody tr.expanded { background: #1f2235; }
+    td { padding: 12px 16px; vertical-align: top; }
+    .td-q { max-width: 300px; }
+    .td-q span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    .score {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.82rem;
+    }
+    .score-high   { background: rgba(74,222,128,.12); color: var(--green); }
+    .score-mid    { background: rgba(250,204,21,.12); color: var(--yellow); }
+    .score-low    { background: rgba(248,113,113,.12); color: var(--red); }
+
+    .expand-row { display: none; }
+    .expand-row.open { display: table-row; }
+    .expand-cell {
+      padding: 0 16px 20px;
+      background: #181b2b;
+      border-top: 1px dashed var(--border);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    @media (max-width: 700px) { .detail-grid { grid-template-columns: 1fr; } }
+
+    .detail-block h4 {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .detail-block p {
+      font-size: 0.84rem;
+      color: var(--text);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 160px;
+      overflow-y: auto;
+    }
+
+    .contexts-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+    .ctx-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 8px 12px;
+      font-size: 0.80rem;
+      color: var(--text-muted);
+      max-height: 80px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: max-height 0.3s ease;
+    }
+    .ctx-item.expanded { max-height: 400px; }
+
+    .chevron {
+      display: inline-block;
+      transition: transform 0.2s;
+      margin-left: 6px;
+      font-size: 0.7rem;
+    }
+    tr.expanded .chevron { transform: rotate(180deg); }
+
+    .mini-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+    }
+    .mini-bar-track {
+      flex: 1;
+      height: 6px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .mini-bar-fill { height: 100%; border-radius: 3px; }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>RAGAS <span>Evaluation Report</span></h1>
+  <div class="meta">
+    <span><b>Data:</b> 30/04/2026</span>
+    <span><b>Amostras:</b> 50</span>
+    <span><b>Variante:</b> new</span>
+    <span><b>Modo:</b> optimized_local_metrics</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- KPIs -->
+  <section>
+    <h2>Métricas Gerais</h2>
+    <div class="kpi-grid">
+      <div class="kpi blue">
+        <div class="kpi-label">Similaridade Semântica</div>
+        <div class="kpi-value">92.8%</div>
+        <div class="kpi-sub">answer_semantic_similarity · média</div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-label">Context Recall</div>
+        <div class="kpi-value">89.5%</div>
+        <div class="kpi-sub">context_recall · média</div>
+      </div>
+      <div class="kpi teal">
+        <div class="kpi-label">Context Precision</div>
+        <div class="kpi-value">88.2%</div>
+        <div class="kpi-sub">context_precision · média</div>
+      </div>
+      <div class="kpi purple">
+        <div class="kpi-label">Total de Amostras</div>
+        <div class="kpi-value">50</div>
+        <div class="kpi-sub">Apenas métricas sem LLM</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section>
+    <h2>Visualizações</h2>
+    <div class="charts-row">
+      <div class="chart-card">
+        <h3>Métricas por Amostra (Top 10)</h3>
+        <div class="chart-wrap">
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>Distribuição das Métricas (Dataset Total)</h3>
+        <div class="chart-wrap">
+          <canvas id="radarChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Table -->
+  <section>
+    <h2>Amostras Avaliadas <span style="font-size:0.75rem;font-weight:400;color:var(--text-muted)">(exibindo as 10 primeiras)</span></h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Pergunta</th>
+            <th>Sim. Semântica</th>
+            <th>Context Recall</th>
+            <th>Context Precision</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>Gerado com RAGAS · Variante: new · Modo: optimized_local_metrics</footer>
+
+<script>
+// JSON stringificado em uma única linha com escape seguro
+const samples = [
+  {
+    "question": "Como criar um array NumPy de zeros?",
+    "ground_truth": "Utilize numpy.zeros(shape, dtype=float, order='C') para retornar um novo array de formato (shape) e tipo (dtype) especificados, preenchido com zeros.",
+    "answer": "Para criar um array NumPy de zeros, você pode usar a função `numpy.zeros()`. Exemplo: `array_zeros = np.zeros(5)`",
+    "contexts": ["Arrays NumPy podem ser definidos usando sequências em Python...", "O NumPy suporta uma variedade muito maior de tipos numéricos..."],
+    "answer_semantic_similarity": 0.933,
+    "context_recall": 0.914,
+    "context_precision": 0.894
+  },
+  {
+    "question": "Como criar um array preenchido com o valor um no NumPy?",
+    "ground_truth": "Utilize numpy.ones(shape, dtype=None, order='C') para retornar um novo array com o formato e tipo definidos, totalmente preenchido por valores iguais a um.",
+    "answer": "Para criar um array preenchido com o valor um no NumPy, você pode usar a função `np.ones()`. Exemplo: `np.ones((3, 4))`",
+    "contexts": ["Crie um array. | Converta a entrada em um array...", "Arrays NumPy podem ser definidos usando sequências em Python..."],
+    "answer_semantic_similarity": 0.924,
+    "context_recall": 0.894,
+    "context_precision": 0.887
+  },
+  {
+    "question": "Qual função cria um array com valores espaçados uniformemente dentro de um intervalo?",
+    "ground_truth": "A função numpy.arange([start, ]stop, [step, ]dtype=None) retorna valores uniformemente espaçados dentro de um dado intervalo definido pelos argumentos.",
+    "answer": "Existem duas funções principais no NumPy: `np.linspace()` e `np.arange()`. `np.arange()` cria um array com elementos espaçados por um passo.",
+    "contexts": ["`linspace` vs. `arange` # Tanto linspace quanto arange fornecem formas de particionar um intervalo..."],
+    "answer_semantic_similarity": 0.928,
+    "context_recall": 0.910,
+    "context_precision": 0.873
+  },
+  {
+    "question": "Como criar valores linearmente espaçados no NumPy?",
+    "ground_truth": "Utilize numpy.linspace(start, stop, num=50) para retornar números uniformemente espaçados sobre um intervalo especificado, onde 'num' é o número de amostras geradas.",
+    "answer": "Para criar valores linearmente espaçados no NumPy, você pode utilizar a função `np.linspace()`.",
+    "contexts": ["O principal objetivo do NumPy é o array multidimensional homogêneo...", "Use `numpy.genfromtxt`..."],
+    "answer_semantic_similarity": 0.939,
+    "context_recall": 0.894,
+    "context_precision": 0.877
+  },
+  {
+    "question": "Como alterar o formato de um array NumPy sem mudar seus dados?",
+    "ground_truth": "Utilize o método numpy.reshape(a, newshape, order='C') ou array.reshape(newshape) para dar um novo formato (shape) a um array sem alterar seus dados subjacentes.",
+    "answer": "Para alterar o formato de um array NumPy sem mudar seus dados, você pode utilizar a função `reshape()`.",
+    "contexts": ["Dá uma nova forma a um array sem alterar seus dados. | Devolva um array achatado contíguo."],
+    "answer_semantic_similarity": 0.935,
+    "context_recall": 0.892,
+    "context_precision": 0.883
+  },
+  {
+    "question": "Como calcular a média de elementos de um array no NumPy?",
+    "ground_truth": "A função numpy.mean(a, axis=None) calcula a média aritmética dos elementos do array ao longo do eixo (axis) especificado.",
+    "answer": "Você pode usar a função `np.mean()`. Essa função retorna a média dos elementos do array.",
+    "contexts": ["Ao operar em dois arrays, o NumPy compara suas formas...", "O principal objetivo do NumPy é o array multidimensional homogêneo..."],
+    "answer_semantic_similarity": 0.946,
+    "context_recall": 0.905,
+    "context_precision": 0.887
+  },
+  {
+    "question": "Como somar os elementos de um array no NumPy?",
+    "ground_truth": "Utilize numpy.sum(a, axis=None) para retornar a soma dos elementos de um array sobre um determinado eixo (axis).",
+    "answer": "Para somar os elementos de um array no NumPy, você pode usar a função `np.sum()`. Essa função calcula a soma de todos os elementos.",
+    "contexts": ["Arrays NumPy podem ser definidos usando sequências...", "O NumPy é o pacote fundamental para computação científica em Python..."],
+    "answer_semantic_similarity": 0.942,
+    "context_recall": 0.897,
+    "context_precision": 0.895
+  },
+  {
+    "question": "Como calcular o produto escalar de dois arrays NumPy?",
+    "ground_truth": "A função numpy.dot(a, b) calcula o produto escalar (dot product) entre dois arrays. Para matrizes 2D, equivale à multiplicação matricial.",
+    "answer": "Para calcular o produto escalar de dois arrays NumPy, você pode usar a função `np.dot()` ou o operador `@`.",
+    "contexts": ["Ao operar em dois arrays, o NumPy compara suas formas elementalmente...", "Veja também O termo broadcasting descreve como o NumPy trata arrays..."],
+    "answer_semantic_similarity": 0.953,
+    "context_recall": 0.910,
+    "context_precision": 0.894
+  },
+  {
+    "question": "Como concatenar uma sequência de arrays no NumPy?",
+    "ground_truth": "Utilize numpy.concatenate((a1, a2, ...), axis=0) para unir uma sequência de arrays ao longo de um eixo.",
+    "answer": "Para concatenar uma sequência de arrays no NumPy, você pode usar a função `np.concatenate()` ou `np.vstack()`, `np.hstack()`.",
+    "contexts": ["O NumPy é o pacote fundamental para computação científica em Python...", "O NumPy oferece várias funções para criar arrays a partir de dados tabulares..."],
+    "answer_semantic_similarity": 0.926,
+    "context_recall": 0.899,
+    "context_precision": 0.898
+  },
+  {
+    "question": "Como gerar números aleatórios uniformes entre 0 e 1 no NumPy?",
+    "ground_truth": "A função numpy.random.rand(d0, d1, ..., dn) cria um array da forma especificada e o preenche com amostras aleatórias de uma distribuição uniforme ao longo de [0, 1).",
+    "answer": "Para gerar números aleatórios uniformes entre 0 e 1 no NumPy, você pode usar a função `np.random.uniform()`.",
+    "contexts": ["a palavra-chave out permite que você fornecer um array de saída...", "Em muitos casos, os dados são simétricos ao redor de um centro..."],
+    "answer_semantic_similarity": 0.928,
+    "context_recall": 0.889,
+    "context_precision": 0.870
+  }
+];
+
+function scoreClass(v) {
+  if (v >= 0.75) return 'score-high';
+  if (v >= 0.45) return 'score-mid';
+  return 'score-low';
+}
+
+function pct(v) { return (v * 100).toFixed(1) + '%'; }
+
+function barColor(v) {
+  if (v >= 0.75) return '#4ade80';
+  if (v >= 0.45) return '#facc15';
+  return '#f87171';
+}
+
+// Build table
+const tbody = document.getElementById('tableBody');
+samples.forEach((s, i) => {
+  const tr = document.createElement('tr');
+  tr.id = `row-${i}`;
+  tr.innerHTML = `
+    <td style="color:var(--text-muted);font-size:0.8rem">${String(i+1).padStart(2,'0')}</td>
+    <td class="td-q"><span title="${s.question}">${s.question}</span></td>
+    <td>
+      <div class="mini-bar">
+        <span class="score ${scoreClass(s.answer_semantic_similarity)}">${pct(s.answer_semantic_similarity)}</span>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${s.answer_semantic_similarity*100}%;background:${barColor(s.answer_semantic_similarity)}"></div></div>
+      </div>
+    </td>
+    <td>
+      <div class="mini-bar">
+        <span class="score ${scoreClass(s.context_recall)}">${pct(s.context_recall)}</span>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${s.context_recall*100}%;background:${barColor(s.context_recall)}"></div></div>
+      </div>
+    </td>
+    <td>
+      <div class="mini-bar">
+        <span class="score ${scoreClass(s.context_precision)}">${pct(s.context_precision)}</span>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${s.context_precision*100}%;background:${barColor(s.context_precision)}"></div></div>
+      </div>
+    </td>
+    <td style="text-align:center;color:var(--text-muted)"><span class="chevron">▼</span></td>
+  `;
+
+  const expTr = document.createElement('tr');
+  expTr.className = 'expand-row';
+  expTr.id = `exp-${i}`;
+  expTr.innerHTML = `
+    <td colspan="6" class="expand-cell">
+      <div class="detail-grid">
+        <div class="detail-block">
+          <h4>Pergunta</h4>
+          <p>${s.question}</p>
+        </div>
+        <div class="detail-block">
+          <h4>Ground Truth</h4>
+          <p>${s.ground_truth}</p>
+        </div>
+        <div class="detail-block" style="grid-column: span 2">
+          <h4>Resposta do RAG</h4>
+          <p>${s.answer || 'N/A'}</p>
+        </div>
+      </div>
+      <div style="margin-top:16px">
+        <h4 style="font-size:0.72rem;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:8px">Contextos Recuperados (clique para expandir)</h4>
+        <div class="contexts-list">
+          ${(s.contexts || []).map((c, ci) => `<div class="ctx-item" onclick="this.classList.toggle('expanded')"><b style="color:var(--accent)">Ctx ${ci+1}</b> — ${c}</div>`).join('')}
+        </div>
+      </div>
+    </td>
+  `;
+
+  tr.addEventListener('click', () => {
+    const exp = document.getElementById(`exp-${i}`);
+    const isOpen = exp.classList.contains('open');
+    exp.classList.toggle('open', !isOpen);
+    tr.classList.toggle('expanded', !isOpen);
+  });
+
+  tbody.appendChild(tr);
+  tbody.appendChild(expTr);
+});
+
+// ── Bar Chart ──
+const labels = samples.map((_, i) => `S${i+1}`);
+new Chart(document.getElementById('barChart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Sim. Semântica',
+        data: samples.map(s => +(s.answer_semantic_similarity * 100).toFixed(1)),
+        backgroundColor: 'rgba(108,143,255,0.7)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Context Recall',
+        data: samples.map(s => +(s.context_recall * 100).toFixed(1)),
+        backgroundColor: 'rgba(74,222,128,0.7)',
+        borderRadius: 4,
+      },
+      {
+        label: 'Context Precision',
+        data: samples.map(s => +(s.context_precision * 100).toFixed(1)),
+        backgroundColor: 'rgba(45,212,191,0.7)',
+        borderRadius: 4,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#8892aa', font: { size: 11 } } }
+    },
+    scales: {
+      x: { ticks: { color: '#8892aa' }, grid: { color: '#2e3349' } },
+      y: {
+        ticks: { color: '#8892aa', callback: v => v + '%' },
+        grid: { color: '#2e3349' },
+        min: 0, max: 100
+      }
+    }
+  }
+});
+
+// ── Radar Chart (Globais do Dataset de 50 amostras) ──
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: ['Sim. Semântica', 'Context Recall', 'Context Precision'],
+    datasets: [
+      {
+        label: 'Média (50 amostras)',
+        data: [92.8, 89.5, 88.2],
+        borderColor: '#6c8fff',
+        backgroundColor: 'rgba(108,143,255,0.15)',
+        pointBackgroundColor: '#6c8fff',
+        borderWidth: 2,
+      },
+      {
+        label: 'Mínimo',
+        data: [88.7, 86.6, 86.0],
+        borderColor: '#f87171',
+        backgroundColor: 'rgba(248,113,113,0.08)',
+        pointBackgroundColor: '#f87171',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+      },
+      {
+        label: 'Máximo',
+        data: [95.4, 92.8, 90.6],
+        borderColor: '#4ade80',
+        backgroundColor: 'rgba(74,222,128,0.08)',
+        pointBackgroundColor: '#4ade80',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: '#8892aa', font: { size: 11 } } }
+    },
+    scales: {
+      r: {
+        min: 0, max: 100,
+        ticks: { color: '#8892aa', backdropColor: 'transparent', stepSize: 25, callback: v => v + '%' },
+        grid: { color: '#2e3349' },
+        angleLines: { color: '#2e3349' },
+        pointLabels: { color: '#e2e8f0', font: { size: 12 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>
