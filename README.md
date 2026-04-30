@@ -117,7 +117,7 @@ cd app && npm run build
 ## Avaliação RAG
 
 ```bash
-uv run python -m src.eval.ragas_evaluator --sample 10
+uv run python -m src.eval.ragas_evaluator --sample 50
 ```
 
 Métricas calculadas localmente (sem chamar LLM externo):
