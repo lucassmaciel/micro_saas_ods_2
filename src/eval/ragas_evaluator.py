@@ -213,30 +213,30 @@ def calculate_context_recall(
     contexts: list[str],
 ) -> float:
     """
-    Recall baseado em sobreposição de tokens significativos.
-
-    Usa regex para extrair apenas sequências alfanuméricas — isso resolve dois
-    problemas do split() original:
-      - "merge()" e "how." viravam tokens únicos que nunca batiam no contexto
-      - "np.zeros(shape)" virava um token gigante sem correspondência
+    Recall baseado em similaridade semântica (embeddings).
     """
-
     if not contexts:
         return 0.0
 
-    # Extrai tokens alfabéticos/numéricos puros (ignora pontuação)
-    gt_tokens = re.findall(r"[a-záàãâéèêíìîóòõôúùûçñü0-9]+", ground_truth.lower())
-    gt_words = set(w for w in gt_tokens if len(w) > 4)
+    try:
+        from sentence_transformers import util
+        import numpy as np
 
-    if not gt_words:
-        return 1.0
+        model = get_embedding_model()
 
-    context_text = " ".join(contexts).lower()
+        # Codifica o ground truth e os contextos
+        gt_emb = model.encode(ground_truth, convert_to_tensor=True)
+        ctx_embs = model.encode(contexts, convert_to_tensor=True)
 
-    found = sum(1 for w in gt_words if w in context_text)
+        # Calcula similaridade de cosseno entre o ground truth e todos os contextos
+        similarities = util.pytorch_cos_sim(gt_emb, ctx_embs)[0].cpu().numpy()
 
-    return found / len(gt_words)
+        # O context recall será a similaridade do contexto mais relevante retornado
+        return float(np.max(similarities))
 
+    except Exception as e:
+        print(f"[!] Erro ao calcular context recall: {e}")
+        return 0.0
 
 def calculate_context_precision(
     question: str,
