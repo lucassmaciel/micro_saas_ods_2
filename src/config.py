@@ -34,7 +34,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 # llama-3.1-8b-instant: ~6× higher free-tier token quota than 70b + significantly
 # faster inference. Quality is adequate for context-constrained documentation RAG.
 # Switch back to "llama-3.3-70b-versatile" via RAG_LLM_MODEL env var if needed.
-GROQ_LLM_MODEL = os.environ.get("GROQ_LLM_MODEL", "llama-3.3-70b-versatile")
+GROQ_LLM_MODEL = os.environ.get("GROQ_LLM_MODEL", "llama-3.1-8b-instant")
 GROQ_LLM_FAST = os.environ.get("GROQ_LLM_MODEL_FAST", "llama-3.1-8b-instant")
 
 # --- Cerebras (fallback LLM when Groq rate-limits) ---
