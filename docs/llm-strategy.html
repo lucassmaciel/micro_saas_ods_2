@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estratégia de LLM — RAG PT-BR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b0f;
+    --surface: #0e1318;
+    --border: #1c2530;
+    --amber: #f5a623;
+    --amber-dim: #7a5010;
+    --green: #3dd68c;
+    --green-dim: #1a5c3e;
+    --red: #ff4d4d;
+    --blue: #4da6ff;
+    --text: #c8d6e5;
+    --muted: #4a5a6a;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-display: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.7;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grain overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.6;
+  }
+
+  /* scanlines */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.07) 2px,
+      rgba(0,0,0,0.07) 4px
+    );
+    pointer-events: none;
+    z-index: 998;
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 24px 80px;
+  }
+
+  /* header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 32px;
+    margin-bottom: 52px;
+    animation: fadeDown 0.6s ease both;
+  }
+
+  .header-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 20px;
+  }
+
+  .header-badge::before {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--amber);
+    box-shadow: 0 0 8px var(--amber);
+    animation: pulse 2s ease infinite;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-size: clamp(28px, 5vw, 46px);
+    font-weight: 800;
+    line-height: 1.1;
+    color: #fff;
+    letter-spacing: -0.02em;
+    margin-bottom: 14px;
+  }
+
+  h1 span { color: var(--amber); }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 12px;
+    max-width: 520px;
+  }
+
+  /* sections */
+  section {
+    margin-bottom: 56px;
+    animation: fadeUp 0.6s ease both;
+  }
+
+  section:nth-child(2) { animation-delay: 0.1s; }
+  section:nth-child(3) { animation-delay: 0.2s; }
+  section:nth-child(4) { animation-delay: 0.3s; }
+  section:nth-child(5) { animation-delay: 0.4s; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  h2 {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 18px;
+    letter-spacing: -0.01em;
+  }
+
+  /* model card */
+  .model-primary {
+    background: var(--surface);
+    border: 1px solid var(--amber-dim);
+    border-radius: 8px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+
+  .model-primary::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--amber), transparent);
+  }
+
+  .model-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 3px;
+    margin-bottom: 14px;
+  }
+
+  .tag-primary { background: rgba(245,166,35,0.15); color: var(--amber); border: 1px solid var(--amber-dim); }
+  .tag-fallback { background: rgba(61,214,140,0.1); color: var(--green); border: 1px solid var(--green-dim); }
+  .tag-final { background: rgba(77,166,255,0.1); color: var(--blue); border: 1px solid #1a3a5c; }
+
+  .model-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 6px;
+    letter-spacing: -0.01em;
+  }
+
+  .model-provider {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 20px;
+  }
+
+  /* metrics row */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+  }
+
+  .metric {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+
+  .metric-label {
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+
+  .metric-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--amber);
+  }
+
+  .metric-value.green { color: var(--green); }
+  .metric-value.blue { color: var(--blue); }
+
+  /* benefit list */
+  .benefit-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .benefit-list li {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: border-color 0.2s;
+  }
+
+  .benefit-list li:hover { border-color: var(--amber-dim); }
+
+  .benefit-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: rgba(245,166,35,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    margin-top: 1px;
+  }
+
+  .benefit-text strong {
+    display: block;
+    color: #fff;
+    font-size: 12px;
+    margin-bottom: 2px;
+  }
+
+  .benefit-text span { color: var(--muted); font-size: 11px; }
+
+  /* cascade diagram */
+  .cascade {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .cascade-node {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .cascade-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 40px;
+    flex-shrink: 0;
+  }
+
+  .cascade-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--amber);
+    background: var(--bg);
+    box-shadow: 0 0 10px rgba(245,166,35,0.4);
+    flex-shrink: 0;
+    margin-top: 20px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .cascade-dot.green { border-color: var(--green); box-shadow: 0 0 10px rgba(61,214,140,0.4); }
+  .cascade-dot.blue { border-color: var(--blue); box-shadow: 0 0 10px rgba(77,166,255,0.4); }
+
+  .cascade-line {
+    width: 2px;
+    flex: 1;
+    background: linear-gradient(180deg, var(--amber-dim), var(--border));
+    margin: 0 auto;
+    min-height: 20px;
+  }
+
+  .cascade-line.green { background: linear-gradient(180deg, var(--green-dim), var(--border)); }
+
+  .cascade-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin: 8px 0 8px 16px;
+    position: relative;
+    transition: border-color 0.25s, transform 0.25s;
+  }
+
+  .cascade-card:hover { transform: translateX(4px); }
+  .cascade-card.amber { border-color: var(--amber-dim); }
+  .cascade-card.green { border-color: var(--green-dim); }
+  .cascade-card.blue { border-color: #1a3a5c; }
+
+  .cascade-step {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .cascade-model { font-size: 14px; font-weight: 600; color: #fff; }
+  .cascade-provider { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+
+  .cascade-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+  }
+
+  .cascade-trigger::before {
+    content: '↯';
+    font-size: 12px;
+    color: var(--red);
+  }
+
+  /* comparison table */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  thead {
+    background: rgba(245,166,35,0.06);
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    padding: 12px 16px;
+    text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .td-model { color: #fff; font-weight: 600; }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  .badge-win { background: rgba(61,214,140,0.15); color: var(--green); }
+  .badge-mid { background: rgba(245,166,35,0.12); color: var(--amber); }
+  .badge-loss { background: rgba(255,77,77,0.1); color: #ff7070; }
+
+  /* code block */
+  .code-block {
+    background: #040608;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .code-dots { display: flex; gap: 6px; }
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .cd-r { background: #ff5f57; }
+  .cd-y { background: #febc2e; }
+  .cd-g { background: #28c840; }
+
+  .code-lang {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    line-height: 1.8;
+    font-size: 12px;
+  }
+
+  .kw { color: #c792ea; }
+  .fn { color: #82aaff; }
+  .st { color: #c3e88d; }
+  .cm { color: #4a5a6a; font-style: italic; }
+  .cf { color: var(--amber); }
+  .ex { color: #ff9cac; }
+
+  /* footer */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding-top: 28px;
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: gap;
+    gap: 12px;
+    animation: fadeUp 0.6s 0.5s ease both;
+  }
+
+  /* animations */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--amber); }
+    50%       { opacity: 0.5; box-shadow: 0 0 4px var(--amber); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-badge">Sistema ativo · Estratégia de LLM</div>
+    <h1>Por que <span>llama-3.1-8b</span><br>como modelo principal?</h1>
+    <p class="subtitle">Análise de custo-benefício da stack de inferência do assistente RAG PT-BR e lógica de cascata de fallback.</p>
+  </header>
+
+  <!-- MODELO PRIMÁRIO -->
+  <section>
+    <div class="section-label">01 · Modelo primário</div>
+    <div class="model-primary">
+      <span class="model-tag tag-primary">▲ Primário</span>
+      <div class="model-name">llama-3.1-8b-instant</div>
+      <div class="model-provider">Groq · free tier · inferência ultra-rápida</div>
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Quota diária</div>
+          <div class="metric-value">6× maior</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Latência</div>
+          <div class="metric-value green">~0.4s</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">RPM</div>
+          <div class="metric-value blue">30 req/min</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Qualidade RAG</div>
+          <div class="metric-value">suficiente</div>
+        </div>
+      </div>
+    </div>
+
+    <ul class="benefit-list">
+      <li>
+        <div class="benefit-icon">⚡</div>
+        <div class="benefit-text">
+          <strong>6× mais quota diária que o 70b</strong>
+          <span>O tier gratuito do Groq aloca muito mais tokens por dia para modelos 8b, reduzindo drasticamente rate limits em produção.</span>
+        </div>
+      </li>
+      <li>
+        <div class="benefit-icon">⏱</div>
+        <div class="benefit-text">
+          <strong>Inferência significativamente mais rápida</strong>
+          <span>Com a arquitetura de chips LPU do Groq, o 8b responde em ~400ms contra ~2s do 70b — melhor UX percebida no frontend.</span>
+        </div>
+      </li>
+      <li>
+        <div class="benefit-icon">🎯</div>
+        <div class="benefit-text">
+          <strong>Qualidade adequada para RAG com contexto restrito</strong>
+          <span>O pipeline envia apenas 3 chunks rerankeados ao LLM. Com contexto bem delimitado, o 8b performa de forma equivalente ao 70b na tarefa de geração de resposta.</span>
+        </div>
+      </li>
+      <li>
+        <div class="benefit-icon">💰</div>
+        <div class="benefit-text">
+          <strong>Sem custo adicional no tier free</strong>
+          <span>Ambos os modelos Groq são gratuitos, mas o 8b tem limites de tokens por dia muito superiores — menos interrupções sem aumentar custo.</span>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <!-- CASCATA DE FALLBACK -->
+  <section>
+    <div class="section-label">02 · Cascata de fallback</div>
+    <h2>Como funciona quando algo falha</h2>
+
+    <div class="cascade">
+
+      <div class="cascade-node">
+        <div class="cascade-left">
+          <div class="cascade-dot"></div>
+          <div class="cascade-line"></div>
+        </div>
+        <div class="cascade-card amber">
+          <div class="cascade-step">Passo 1 — Tentativa principal</div>
+          <div class="cascade-model">llama-3.1-8b-instant</div>
+          <div class="cascade-provider">Groq · primário</div>
+          <span class="cascade-trigger">Falha? Rate limit ou erro de servidor → próximo</span>
+        </div>
+      </div>
+
+      <div class="cascade-node">
+        <div class="cascade-left">
+          <div class="cascade-dot green"></div>
+          <div class="cascade-line green"></div>
+        </div>
+        <div class="cascade-card green">
+          <div class="cascade-step">Passo 2 — Retry Groq</div>
+          <div class="cascade-model">llama-3.1-8b-instant</div>
+          <div class="cascade-provider">Groq · segunda tentativa</div>
+          <span class="cascade-trigger">Falha? Qualquer erro → próximo</span>
+        </div>
+      </div>
+
+      <div class="cascade-node">
+        <div class="cascade-left">
+          <div class="cascade-dot blue"></div>
+        </div>
+        <div class="cascade-card blue">
+          <div class="cascade-step">Passo 3 — Fallback final (provider diferente)</div>
+          <div class="cascade-model">llama-3.3-70b</div>
+          <div class="cascade-provider">Cerebras · provedor independente</div>
+          <span class="cascade-trigger">Falha? HTTPException 502 retornada ao cliente</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- COMPARAÇÃO -->
+  <section>
+    <div class="section-label">03 · Comparação de modelos</div>
+    <h2>8b vs 70b no contexto deste sistema</h2>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Critério</th>
+            <th>llama-3.1-8b (atual)</th>
+            <th>llama-3.3-70b (anterior)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Quota diária (Groq free)</td>
+            <td class="td-model"><span class="badge badge-win">6× maior</span></td>
+            <td><span class="badge badge-loss">limitado</span></td>
+          </tr>
+          <tr>
+            <td>Latência média</td>
+            <td class="td-model"><span class="badge badge-win">~400ms</span></td>
+            <td><span class="badge badge-loss">~2000ms</span></td>
+          </tr>
+          <tr>
+            <td>Qualidade com contexto RAG</td>
+            <td class="td-model"><span class="badge badge-mid">adequada</span></td>
+            <td><span class="badge badge-win">superior</span></td>
+          </tr>
+          <tr>
+            <td>Rate limits em pico</td>
+            <td class="td-model"><span class="badge badge-win">raramente</span></td>
+            <td><span class="badge badge-loss">frequente</span></td>
+          </tr>
+          <tr>
+            <td>Adequado para RAG 3-chunk</td>
+            <td class="td-model"><span class="badge badge-win">sim</span></td>
+            <td><span class="badge badge-win">sim</span></td>
+          </tr>
+          <tr>
+            <td>Risco de 502 por rate limit</td>
+            <td class="td-model"><span class="badge badge-win">baixo</span></td>
+            <td><span class="badge badge-loss">alto</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- CÓDIGO -->
+  <section>
+    <div class="section-label">04 · Implementação</div>
+    <h2>Lógica de cascata no código</h2>
+
+    <div class="code-block">
+      <div class="code-header">
+        <div class="code-dots">
+          <div class="code-dot cd-r"></div>
+          <div class="code-dot cd-y"></div>
+          <div class="code-dot cd-g"></div>
+        </div>
+        <span class="code-lang">src/rag_query.py</span>
+      </div>
+      <pre><span class="kw">def</span> <span class="fn">generate_answer_with_fallback</span>(prompt: <span class="ex">str</span>) -> <span class="ex">str</span>:
+    <span class="cm">"""Cascata: Groq 8b → Groq 8b (retry) → Cerebras 70b."""</span>
+
+    <span class="cm"># Tentativa 1 — modelo primário (Groq 8b)</span>
+    <span class="cf">try</span>:
+        <span class="cf">return</span> <span class="fn">generate_answer</span>(prompt, model=config.GROQ_LLM_MODEL)
+    <span class="cf">except</span> <span class="ex">Exception</span>:
+        <span class="cf">pass</span>  <span class="cm"># captura rate limits, erros de servidor, chave ausente</span>
+
+    <span class="cm"># Tentativa 2 — retry no mesmo provider</span>
+    <span class="cf">try</span>:
+        <span class="cf">return</span> <span class="fn">generate_answer</span>(prompt, model=config.GROQ_LLM_FAST)
+    <span class="cf">except</span> <span class="ex">Exception</span>:
+        <span class="cf">pass</span>
+
+    <span class="cm"># Tentativa 3 — provider independente (Cerebras)</span>
+    <span class="cm"># Se falhar, propaga → HTTPException 502 em app.py</span>
+    <span class="cf">return</span> <span class="fn">_generate_cerebras</span>(prompt)</pre>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <span>RAG PT-BR · Estratégia de Inferência</span>
+    <span>Atualizado: Abril 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>
