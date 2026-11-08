@@ -1,3 +1,13 @@
+---
+title: RAG PT Backend
+emoji: 🤖
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Data Analyst Assistant
 
 Assistente RAG em PT-BR para análise de dados com Python, focado em `pandas`, `numpy`, `matplotlib` e `seaborn`. O sistema combina um backend FastAPI com retrieval sobre documentação indexada e um frontend Next.js.
